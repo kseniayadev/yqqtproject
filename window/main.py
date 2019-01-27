@@ -1,19 +1,161 @@
+from calendar import Calendar
+import datetime
+
 from PyQt5 import QtWidgets, QtCore
 
-QWidget, QMainWindow = QtWidgets.QWidget, QtWidgets.QMainWindow
-QLabel = QtWidgets.QLabel
+from months import Months
+
+QWidget, QMainWindow, QDialog = (
+    QtWidgets.QWidget,
+    QtWidgets.QMainWindow,
+    QtWidgets.QDialog
+)
+QLabel, QTableWidget = QtWidgets.QLabel, QtWidgets.QTableWidget
+QPushButton, QSpinBox, QComboBox = (
+    QtWidgets.QPushButton,
+    QtWidgets.QSpinBox,
+    QtWidgets.QComboBox
+)
+QTableWidgetItem, QAbstractItemView = (
+    QtWidgets.QTableWidgetItem,
+    QtWidgets.QAbstractItemView
+)
+QVBoxLayout, QHBoxLayout, QFormLayout = (
+    QtWidgets.QVBoxLayout,
+    QtWidgets.QHBoxLayout,
+    QtWidgets.QFormLayout
+)
 QMenuBar = QtWidgets.QMenuBar
 
 Qt = QtCore.Qt
 
+
 class MainWidget(QWidget):
+    calendar = Calendar()
+    maxYear = datetime.MAXYEAR
+    minYear = datetime.MINYEAR
+
+    class SelectMonthDialog(QDialog):
+        def __init__(self, parent=None, flags=Qt.Dialog):
+            super().__init__(parent, flags)
+            self.initUi()
+
+        def initUi(self):
+            today = datetime.date.today()
+            eyear = QSpinBox()
+            eyear.setMinimum(MainWidget.minYear)
+            eyear.setMaximum(MainWidget.maxYear)
+            eyear.setValue(today.year)
+            self.eyear = eyear
+            emonth = QComboBox()
+            emonth.addItems((month.name for month in Months))
+            emonth.setEditable(False)
+            emonth.setInsertPolicy(0)
+            emonth.setCurrentIndex(today.month - 1)
+            self.emonth = emonth
+            form = QFormLayout()
+            form.addRow('&Month: ', emonth)
+            form.addRow('&Year: ', eyear)
+            bok = QPushButton('&OK')
+            bok.clicked.connect(self.accept)
+            bcancel = QPushButton('&Cancel')
+            bcancel.clicked.connect(self.reject)
+            hbox = QHBoxLayout()
+            hbox.addWidget(bok)
+            hbox.addWidget(bcancel)
+            vbox = QVBoxLayout()
+            vbox.addLayout(form)
+            vbox.addLayout(hbox)
+            self.setLayout(vbox)
+
     def __init__(self, parent=None):
         super().__init__(parent)
+        today = datetime.date.today()
+        self.month = today.month
+        self.year = today.year
         self.initUi()
-    
+
     def initUi(self):
-        QLabel('Test', self)
-    
+        vbox = QVBoxLayout()
+        hbox = QHBoxLayout()
+        bprevious = QPushButton('<')
+        bprevious.clicked.connect(self.previousMonth)
+        bnext = QPushButton('>')
+        bnext.clicked.connect(self.nextMonth)
+        binfo = QPushButton('Info')
+        binfo.clicked.connect(self.selectMonth)
+        hbox.addWidget(bprevious)
+        hbox.addWidget(binfo)
+        hbox.addWidget(bnext)
+        vbox.addLayout(hbox)
+        tcalendar = QTableWidget()
+        self.tcalendar = tcalendar
+        self.bprevious = bprevious
+        self.bnext = bnext
+        self.binfo = binfo
+        vbox.addWidget(tcalendar)
+        self.setLayout(vbox)
+        self.initCalendar()
+
+    def initCalendar(self):
+        tcalendar = self.tcalendar
+        tcalendar.setColumnCount(7)
+        tcalendar.setHorizontalHeaderLabels((
+            'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'San'
+        ))
+        tcalendar.setRowCount(6)
+        tcalendar.setVerticalHeaderLabels(map(str, range(1, 7)))
+        tcalendar.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.updateCalendar()
+
+    def updateCalendar(self):
+        tcalendar = self.tcalendar
+        days = self.calendar.monthdayscalendar(self.year, self.month)
+        for y, row in enumerate(days):
+            for x, item in enumerate(row):
+                tcalendar.setItem(
+                    y, x,
+                    QTableWidgetItem(str(item) if item != 0 else '')
+                )
+        tcalendar.resizeColumnsToContents()
+        tcalendar.resizeRowsToContents()
+        month = Months(self.month).name
+        year = str(self.year)
+        self.binfo.setText('{}, {}'.format(month, year))
+        w = sum(tcalendar.columnWidth(i) for i in range(7)) + 33
+        h = sum(tcalendar.rowHeight(i) for i in range(7)) + 72
+        self.resize(w, h)
+        self.parent().setFixedSize(w, h)
+
+    def nextMonth(self):
+        month = self.month
+        year = self.year
+        if month == 12:
+            if year + 1 <= self.maxYear:
+                self.month = 1
+                self.year += 1
+        else:
+            self.month += 1
+        self.updateCalendar()
+
+    def previousMonth(self):
+        month = self.month
+        year = self.year
+        if month == 1:
+            if year - 1 >= self.minYear:
+                self.month = 12
+                self.year -= 1
+        else:
+            self.month -= 1
+        self.updateCalendar()
+
+    def selectMonth(self):
+        dialog = MainWidget.SelectMonthDialog()
+        result = dialog.exec_()
+        if result == QDialog.Accepted:
+            self.month = dialog.emonth.currentIndex() + 1
+            self.year = dialog.eyear.value()
+            self.updateCalendar()
 
 
 class MainWindow(QMainWindow):
