@@ -4,6 +4,7 @@ import datetime
 from PyQt5 import QtWidgets, QtCore
 
 from months import Months
+from window.editor import EditorWindow
 
 QWidget, QMainWindow, QDialog = (
     QtWidgets.QWidget,
@@ -27,8 +28,9 @@ QVBoxLayout, QHBoxLayout, QFormLayout = (
 )
 QMenuBar = QtWidgets.QMenuBar
 
-Qt = QtCore.Qt
+Qt, QEvent = QtCore.Qt, QtCore.QEvent
 
+QItemSelectionModel = QtCore.QItemSelectionModel
 
 class MainWidget(QWidget):
     calendar = Calendar()
@@ -67,7 +69,6 @@ class MainWidget(QWidget):
             vbox.addLayout(form)
             vbox.addLayout(hbox)
             self.setLayout(vbox)
-
     def __init__(self, parent=None):
         super().__init__(parent)
         today = datetime.date.today()
@@ -97,6 +98,16 @@ class MainWidget(QWidget):
         self.setLayout(vbox)
         self.initCalendar()
 
+    def eventFilter(self, source, event):
+        if (event.type() == QEvent.MouseButtonDblClick and
+            event.buttons() == Qt.LeftButton and
+            source is self.tcalendar.viewport()):
+            item = self.tcalendar.itemAt(event.pos())
+            if item is not None:
+                if item.text() != '':
+                    self.openEditor(int(item.text()))
+        return super().eventFilter(source, event)
+
     def initCalendar(self):
         tcalendar = self.tcalendar
         tcalendar.setColumnCount(7)
@@ -106,11 +117,17 @@ class MainWidget(QWidget):
         tcalendar.setRowCount(6)
         tcalendar.setVerticalHeaderLabels(map(str, range(1, 7)))
         tcalendar.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        selection = QItemSelectionModel(tcalendar.model())
+        tcalendar.setSelectionModel(selection)
+        tcalendar.viewport().installEventFilter(self)
         self.updateCalendar()
 
     def updateCalendar(self):
         tcalendar = self.tcalendar
         days = self.calendar.monthdayscalendar(self.year, self.month)
+        for y in range(6):
+            for x in range(7):
+                tcalendar.setItem(y, x, QTableWidgetItem(''))
         for y, row in enumerate(days):
             for x, item in enumerate(row):
                 tcalendar.setItem(
@@ -156,6 +173,14 @@ class MainWidget(QWidget):
             self.month = dialog.emonth.currentIndex() + 1
             self.year = dialog.eyear.value()
             self.updateCalendar()
+
+    def openEditor(self, day, month=None, year=None):
+        if month is None:
+            month = self.month
+        if year is None:
+            year = self.year
+        editor = EditorWindow(day, month, year)
+        editor.exec_()
 
 
 class MainWindow(QMainWindow):
