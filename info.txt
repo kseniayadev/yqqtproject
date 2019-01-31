@@ -1,0 +1,3 @@
+The QtSql module is needed for work
+Installation on Ubuntu:
+	sudo apt install python3-pyqt5.qtsql
