@@ -1,10 +1,12 @@
-from calendar import Calendar
 import datetime
+from calendar import Calendar
 
-from PyQt5 import QtWidgets, QtCore
+from PyQt5 import QtCore, QtSql, QtWidgets
 
+from db import DatabaseError, conn
 from months import Months
 from window.editor import EditorWindow
+from window.info import InfoWindow
 
 QWidget, QMainWindow, QDialog = (
     QtWidgets.QWidget,
@@ -31,6 +33,9 @@ QMenuBar = QtWidgets.QMenuBar
 Qt, QEvent = QtCore.Qt, QtCore.QEvent
 
 QItemSelectionModel = QtCore.QItemSelectionModel
+
+QSqlQuery = QtSql.QSqlQuery
+
 
 class MainWidget(QWidget):
     calendar = Calendar()
@@ -69,6 +74,7 @@ class MainWidget(QWidget):
             vbox.addLayout(form)
             vbox.addLayout(hbox)
             self.setLayout(vbox)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         today = datetime.date.today()
@@ -83,29 +89,34 @@ class MainWidget(QWidget):
         bprevious.clicked.connect(self.previousMonth)
         bnext = QPushButton('>')
         bnext.clicked.connect(self.nextMonth)
-        binfo = QPushButton('Info')
-        binfo.clicked.connect(self.selectMonth)
+        bdate = QPushButton('Date')
+        bdate.clicked.connect(self.selectMonth)
         hbox.addWidget(bprevious)
-        hbox.addWidget(binfo)
+        hbox.addWidget(bdate)
         hbox.addWidget(bnext)
         vbox.addLayout(hbox)
         tcalendar = QTableWidget()
+        self.info = InfoWindow()
         self.tcalendar = tcalendar
         self.bprevious = bprevious
         self.bnext = bnext
-        self.binfo = binfo
+        self.bdate = bdate
         vbox.addWidget(tcalendar)
+        vbox.addWidget(self.info)
         self.setLayout(vbox)
         self.initCalendar()
 
     def eventFilter(self, source, event):
         if (event.type() == QEvent.MouseButtonDblClick and
-            event.buttons() == Qt.LeftButton and
-            source is self.tcalendar.viewport()):
+                event.buttons() == Qt.LeftButton and
+                source is self.tcalendar.viewport()):
             item = self.tcalendar.itemAt(event.pos())
             if item is not None:
                 if item.text() != '':
-                    self.openEditor(int(item.text()))
+                    item = item.text()
+                    if ':' in item:
+                        item = item[:item.index(':')]
+                    self.openEditor(int(item))
         return super().eventFilter(source, event)
 
     def initCalendar(self):
@@ -128,19 +139,46 @@ class MainWidget(QWidget):
         for y in range(6):
             for x in range(7):
                 tcalendar.setItem(y, x, QTableWidgetItem(''))
+        self.info.clear()
         for y, row in enumerate(days):
             for x, item in enumerate(row):
+                if item == 0:
+                    item = ''
+                else:
+                    if not conn.isOpen():
+                        if not conn.open():
+                            raise DatabaseError
+                    query = QSqlQuery(conn)
+                    query.prepare('SELECT price, count, category FROM outgones WHERE\
+                        (day = {} and month = {} and year = {})'.format(
+                            item, self.month, self.year
+                    ))
+                    query.exec_()
+                    if not query.isSelect():
+                        raise DatabaseError
+                    s = 0
+                    query.first()
+                    while query.isValid():
+                        val = query.value('price') * query.value('count')
+                        s += val
+                        self.info.addData(query.value('category'), val)
+                        query.next()
+                    if s == 0:
+                        item = str(item)
+                    else:
+                        item = '{}: {}'.format(item, round(s, 2))
+                    conn.close()
                 tcalendar.setItem(
                     y, x,
-                    QTableWidgetItem(str(item) if item != 0 else '')
+                    QTableWidgetItem(item)
                 )
         tcalendar.resizeColumnsToContents()
         tcalendar.resizeRowsToContents()
         month = Months(self.month).name
         year = str(self.year)
-        self.binfo.setText('{}, {}'.format(month, year))
+        self.bdate.setText('{}, {}'.format(month, year))
         w = sum(tcalendar.columnWidth(i) for i in range(7)) + 33
-        h = sum(tcalendar.rowHeight(i) for i in range(7)) + 72
+        h = sum(tcalendar.rowHeight(i) for i in range(7)) + 198
         self.resize(w, h)
         self.parent().setFixedSize(w, h)
 

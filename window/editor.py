@@ -20,7 +20,7 @@ class EditorWindow(QDialog):
         self.month = month
         self.year = year
         self.initUi()
-    
+
     def initUi(self):
         linfo = QLabel('info', self)
         linfo.setText('{}, {}, {}'.format(
