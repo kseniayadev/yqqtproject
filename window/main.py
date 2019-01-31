@@ -219,6 +219,7 @@ class MainWidget(QWidget):
             year = self.year
         editor = EditorWindow(day, month, year)
         editor.exec_()
+        self.updateCalendar()
 
 
 class MainWindow(QMainWindow):
